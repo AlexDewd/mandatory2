@@ -76,7 +76,13 @@ class FunctionSpace:
         return P
 
     def eval_derivative_basis_function_all(self, Xj, k=1):
-        raise NotImplementedError
+        Xj = np.atleast_1d(Xj)
+        M = self.N + 1
+        D = np.empty((len(Xj), M))
+        for j in range(M):
+            dj = self.derivative_basis_function(j, k=k)
+            D[:, j] = dj(Xj)
+        return D @ self.S.T
 
     def inner_product(self, u):
         us = map_expression_true_domain(u, x, self.domain, self.reference_domain)
@@ -86,10 +92,8 @@ class FunctionSpace:
         r = self.reference_domain
         for i in range(self.N + 1):
             psi = self.basis_function(i)
-
             def uv(Xj):
                 return us(Xj) * psi(Xj)
-
             uj[i] = float(h) * quad(uv, float(r[0]), float(r[1]))[0]
         return uj
 
@@ -100,6 +104,10 @@ class FunctionSpace:
 class Legendre(FunctionSpace):
     def __init__(self, N, domain=(-1, 1)):
         FunctionSpace.__init__(self, N, domain=domain)
+
+    @property
+    def reference_domain(self):
+        return (-1, 1) 
 
     def basis_function(self, j, sympy=False):
         if sympy:
@@ -123,10 +131,16 @@ class Legendre(FunctionSpace):
         return np.polynomial.legendre.legval(Xj, uh)
 
 
+
 class Chebyshev(FunctionSpace):
     def __init__(self, N, domain=(-1, 1)):
         FunctionSpace.__init__(self, N, domain=domain)
+        self.N = N
 
+    @property
+    def reference_domain(self):
+        return (-1, 1) 
+    
     def basis_function(self, j, sympy=False):
         if sympy:
             return sp.cos(j * sp.acos(x))
@@ -153,10 +167,9 @@ class Chebyshev(FunctionSpace):
         Xj = map_reference_domain(xj, self.domain, self.reference_domain)
         poly = Cheb(uh, domain=self.reference_domain)
         return poly(Xj)
-
+        
     def inner_product(self, u):
         us = map_expression_true_domain(u, x, self.domain, self.reference_domain)
-        # change of variables to x=cos(theta)
         us = sp.simplify(us.subs(x, sp.cos(x)), inverse=True)
         us = sp.lambdify(x, us)
         uj = np.zeros(self.N + 1)
@@ -167,10 +180,8 @@ class Chebyshev(FunctionSpace):
             sp.simplify(self.basis_function(k, True).subs(x, sp.cos(x), inverse=True)),
         )
         for i in range(self.N + 1):
-
             def uv(Xj, j):
                 return us(Xj) * basis(j, Xj)
-
             uj[i] = float(h) * quad(uv, 0, np.pi, args=(i,))[0]
         return uj
 
@@ -236,7 +247,6 @@ class Cosines(Trigonometric):
         else:
             scale = -((-1)**(k // 2)) * (jp**k)
             return lambda Xj: scale * np.sin(jp * Xj )
-
 
     def L2_norm_sq(self, N):
         d = 0.5 * np.ones(self.N + 1)
